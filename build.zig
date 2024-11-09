@@ -69,10 +69,18 @@ fn buildLegacy(b: *Build, optimize: std.builtin.OptimizeMode) !void {
         });
 
         lib.root_module.stack_check = false;
+        lib.pie = true;
 
-        const name = try std.fmt.allocPrint(b.allocator, "platform/{s}-{s}.a", .{
-            @tagName(target.os_tag.?),
-            @tagName(target.cpu_arch.?),
+        const os_name = @tagName(target.os_tag.?);
+        const cpu_name = switch (target.cpu_arch.?) {
+            .aarch64 => "arm64",
+            .x86_64 => "x64",
+            else => unreachable,
+        };
+
+        const name = try std.fmt.allocPrint(b.allocator, "platform/{s}-{s}.o", .{
+            os_name,
+            cpu_name,
         });
 
         const copy_legacy = b.addWriteFiles();
