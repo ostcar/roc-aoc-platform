@@ -4,9 +4,15 @@ const OptimizeMode = std.builtin.OptimizeMode;
 const LazyPath = std.Build.LazyPath;
 const Compile = std.Build.Step.Compile;
 
-pub fn build(b: *Build) void {
-    const target = b.standardTargetOptions(.{});
+pub fn build(b: *Build) !void {
     const optimize = b.standardOptimizeOption(.{});
+
+    buildDynhost(b, optimize);
+    try buildLegacy(b, optimize);
+}
+
+fn buildDynhost(b: *Build, optimize: std.builtin.OptimizeMode) void {
+    const target = b.resolveTargetQuery(.{ .cpu_arch = .x86_64, .os_tag = .linux });
 
     // Build libapp.so
     const build_libapp_so = b.addSystemCommand(&.{"roc"});
@@ -42,27 +48,38 @@ pub fn build(b: *Build) void {
     preprocess_host.addFileArg(libapp_filename);
     preprocess_host.step.dependOn(&copy_dynhost.step);
 
-    // Command to preprocess host
-    const cmd_preprocess = b.step("surgical", "creates the files necessary for the surgical linker");
-    cmd_preprocess.dependOn(&preprocess_host.step);
+    b.getInstallStep().dependOn(&preprocess_host.step);
+}
 
-    // For legacy linker
-    const lib = b.addStaticLibrary(.{
-        .name = "linux-x86",
-        .root_source_file = b.path("host/host.zig"),
-        .target = target,
-        .optimize = optimize,
-        .link_libc = true,
-    });
+fn buildLegacy(b: *Build, optimize: std.builtin.OptimizeMode) !void {
+    const targets: []const std.Target.Query = &.{
+        .{ .cpu_arch = .aarch64, .os_tag = .macos },
+        .{ .cpu_arch = .x86_64, .os_tag = .macos },
+        .{ .cpu_arch = .aarch64, .os_tag = .linux },
+        .{ .cpu_arch = .x86_64, .os_tag = .linux },
+    };
 
-    lib.root_module.stack_check = false;
+    for (targets) |target| {
+        const lib = b.addStaticLibrary(.{
+            .name = "linux-x86",
+            .root_source_file = b.path("host/host.zig"),
+            .target = b.resolveTargetQuery(target),
+            .optimize = optimize,
+            .link_libc = true,
+        });
 
-    const copy_legacy = b.addWriteFiles();
-    //const copy_legacy = b.addUpdateSourceFiles(); // for zig 0.14
-    copy_legacy.addCopyFileToSource(lib.getEmittedBin(), "platform/linux-x64.a");
-    copy_legacy.step.dependOn(&lib.step);
+        lib.root_module.stack_check = false;
 
-    // Command for legacy
-    const cmd_legacy = b.step("legacy", "build for legacy");
-    cmd_legacy.dependOn(&copy_legacy.step);
+        const name = try std.fmt.allocPrint(b.allocator, "platform/{s}-{s}.a", .{
+            @tagName(target.os_tag.?),
+            @tagName(target.cpu_arch.?),
+        });
+
+        const copy_legacy = b.addWriteFiles();
+        //const copy_legacy = b.addUpdateSourceFiles(); // for zig 0.14
+        copy_legacy.addCopyFileToSource(lib.getEmittedBin(), name);
+        copy_legacy.step.dependOn(&lib.step);
+
+        b.getInstallStep().dependOn(&copy_legacy.step);
+    }
 }
