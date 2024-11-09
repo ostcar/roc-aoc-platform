@@ -1,0 +1,12 @@
+.{
+    .name = "roc-aoc-platform",
+    .version = "0.0.1",
+    .dependencies = .{},
+    .paths = .{
+        "LICENSE",
+        "README.md",
+        "build.zig",
+        "build.zig.zon",
+        "host",
+    },
+}

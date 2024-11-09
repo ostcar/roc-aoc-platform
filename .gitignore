@@ -1,0 +1,10 @@
+.zig-cache
+zig-out
+
+platform/libapp.so
+platform/dynhost
+platform/linux-x64.rh
+platform/metadata_linux-x64.rm
+platform/linux-x64.a
+
+examples/day
