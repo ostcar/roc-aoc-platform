@@ -1,0 +1,36 @@
+name: Build on Release
+
+on:
+  release:
+    types:
+      - published
+
+jobs:
+  bundle-and-release:
+    name: Bundle and release library
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write 
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Install Roc
+        uses: hasnep/setup-roc@main
+        with:
+          roc-version: nightly
+
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Build platform
+        run: zig build
+
+      - name: Bundle and release the library
+        uses: hasnep/bundle-roc-library@main
+        with:
+          library: platform/main.roc
+          token: ${{ github.token }}
