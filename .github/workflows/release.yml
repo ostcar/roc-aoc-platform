@@ -27,7 +27,7 @@ jobs:
           version: 0.13.0
 
       - name: Build platform
-        run: zig build
+        run: zig build -Doptimize=ReleaseFast
 
       - name: Bundle and release the library
         uses: hasnep/bundle-roc-library@main
