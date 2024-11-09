@@ -9,21 +9,31 @@ const Part = enum(c_int) {
 
 extern fn roc__solutionForHost_1_exposed_generic(*list.RocList, Part) void;
 
+const default_memory_size = 2 << 30;
+var allocator: std.mem.Allocator = undefined;
+var used_memory: usize = 0;
+
 pub fn main() u8 {
     const stdout = std.io.getStdOut().writer();
     var result = list.RocList.empty();
+    const buffer = std.heap.page_allocator.alloc(u8, default_memory_size) catch @panic("OOM");
+    var fba = std.heap.FixedBufferAllocator.init(buffer);
+    allocator = fba.allocator();
 
     var timer = std.time.Timer.start() catch unreachable;
     roc__solutionForHost_1_exposed_generic(&result, Part.part1);
     const took1 = std.fmt.fmtDuration(timer.read());
 
-    stdout.print("Part1 in {}:\n{s}\n\n", .{ took1, rocListAsSlice(result) }) catch unreachable;
+    stdout.print("Part1 in {}, used {} bytes:\n{s}\n\n", .{ took1, used_memory, rocListAsSlice(result) }) catch unreachable;
+
+    fba.reset();
+    used_memory = 0;
 
     timer.reset();
     roc__solutionForHost_1_exposed_generic(&result, Part.part2);
     const took2 = std.fmt.fmtDuration(timer.read());
 
-    stdout.print("Part2 in {}:\n{s}\n", .{ took2, rocListAsSlice(result) }) catch unreachable;
+    stdout.print("Part2 in {}, used {} bytes:\n{s}\n", .{ took2, used_memory, rocListAsSlice(result) }) catch unreachable;
     return 0;
 }
 
@@ -35,42 +45,32 @@ fn rocListAsSlice(rocList: list.RocList) []const u8 {
 }
 
 // Roc memory stuff
-const DEBUG: bool = false;
-
-const Align = 2 * @alignOf(usize);
-extern fn malloc(size: usize) callconv(.C) ?*align(Align) anyopaque;
-extern fn realloc(c_ptr: [*]align(Align) u8, size: usize) callconv(.C) ?*anyopaque;
-extern fn free(c_ptr: [*]align(Align) u8) callconv(.C) void;
 extern fn memcpy(dst: [*]u8, src: [*]u8, size: usize) callconv(.C) void;
 extern fn memset(dst: [*]u8, value: i32, size: usize) callconv(.C) void;
 
-export fn roc_alloc(size: usize, alignment: u32) callconv(.C) ?*anyopaque {
-    if (DEBUG) {
-        const ptr = malloc(size);
-        const stdout = std.io.getStdOut().writer();
-        stdout.print("alloc:   {d} (alignment {d}, size {d})\n", .{ ptr, alignment, size }) catch unreachable;
+const bitsize = @sizeOf(usize);
+
+export fn roc_alloc(size: usize, alignment: u32) [*]u8 {
+    _ = alignment;
+    const mem = allocator.alloc(u8, size) catch @panic("roc_alloc: OOM");
+    used_memory += size;
+    return mem.ptr;
+}
+
+export fn roc_realloc(ptr: [*]u8, new_size: usize, old_size: usize, alignment: u32) [*]u8 {
+    if (allocator.resize(ptr[0..old_size], new_size)) {
+        used_memory += new_size - old_size;
         return ptr;
-    } else {
-        return malloc(size);
     }
+
+    roc_dealloc(ptr, alignment);
+    return roc_alloc(new_size, alignment);
 }
 
-export fn roc_realloc(c_ptr: *anyopaque, new_size: usize, old_size: usize, alignment: u32) callconv(.C) ?*anyopaque {
-    if (DEBUG) {
-        const stdout = std.io.getStdOut().writer();
-        stdout.print("realloc: {d} (alignment {d}, old_size {d})\n", .{ c_ptr, alignment, old_size }) catch unreachable;
-    }
-
-    return realloc(@as([*]align(Align) u8, @alignCast(@ptrCast(c_ptr))), new_size);
-}
-
-export fn roc_dealloc(c_ptr: *anyopaque, alignment: u32) callconv(.C) void {
-    if (DEBUG) {
-        const stdout = std.io.getStdOut().writer();
-        stdout.print("dealloc: {d} (alignment {d})\n", .{ c_ptr, alignment }) catch unreachable;
-    }
-
-    free(@as([*]align(Align) u8, @alignCast(@ptrCast(c_ptr))));
+export fn roc_dealloc(ptr: [*]u8, alignment: u32) void {
+    _ = ptr;
+    _ = alignment;
+    // TODO: Optional dealloc
 }
 
 export fn roc_panic(msg: *str.RocStr, tag_id: u32) callconv(.C) void {
@@ -105,10 +105,6 @@ fn roc_getppid() callconv(.C) c_int {
     return getppid();
 }
 
-fn roc_getppid_windows_stub() callconv(.C) c_int {
-    return 0;
-}
-
 fn roc_shm_open(name: *const i8, oflag: c_int, mode: c_uint) callconv(.C) c_int {
     return shm_open(name, oflag, mode);
 }
@@ -117,14 +113,7 @@ fn roc_mmap(addr: ?*anyopaque, length: c_uint, prot: c_int, flags: c_int, fd: c_
 }
 
 comptime {
-    const builtin = @import("builtin");
-    if (builtin.os.tag == .macos or builtin.os.tag == .linux) {
-        @export(roc_getppid, .{ .name = "roc_getppid", .linkage = .strong });
-        @export(roc_mmap, .{ .name = "roc_mmap", .linkage = .strong });
-        @export(roc_shm_open, .{ .name = "roc_shm_open", .linkage = .strong });
-    }
-
-    if (builtin.os.tag == .windows) {
-        @export(roc_getppid_windows_stub, .{ .name = "roc_getppid", .linkage = .strong });
-    }
+    @export(roc_getppid, .{ .name = "roc_getppid", .linkage = .strong });
+    @export(roc_mmap, .{ .name = "roc_mmap", .linkage = .strong });
+    @export(roc_shm_open, .{ .name = "roc_shm_open", .linkage = .strong });
 }

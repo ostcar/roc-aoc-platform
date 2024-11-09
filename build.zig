@@ -12,7 +12,8 @@ pub fn build(b: *Build) !void {
 }
 
 fn buildDynhost(b: *Build, optimize: std.builtin.OptimizeMode) void {
-    const target = b.resolveTargetQuery(.{ .cpu_arch = .x86_64, .os_tag = .linux });
+    //const target = b.resolveTargetQuery(.{ .cpu_arch = .x86_64, .os_tag = .linux });
+    const target = b.standardTargetOptions(.{});
 
     // Build libapp.so
     const build_libapp_so = b.addSystemCommand(&.{"roc"});
