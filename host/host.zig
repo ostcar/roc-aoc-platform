@@ -15,11 +15,12 @@ var used_memory: usize = 0;
 
 pub fn main() u8 {
     const stdout = std.io.getStdOut().writer();
-    var result = list.RocList.empty();
+
     const buffer = std.heap.page_allocator.alloc(u8, default_memory_size) catch @panic("OOM");
     var fba = std.heap.FixedBufferAllocator.init(buffer);
     allocator = fba.allocator();
 
+    var result = list.RocList.empty();
     var timer = std.time.Timer.start() catch unreachable;
     roc__solutionForHost_1_exposed_generic(&result, Part.part1);
     const took1 = std.fmt.fmtDuration(timer.read());
