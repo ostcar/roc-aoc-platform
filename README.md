@@ -2,7 +2,17 @@
 
 This is a [Roc](https://www.roc-lang.org/)-Platform for Advent of Code.
 
-It can be used like this:
+The platform staticly allocates memory on startup. The default is one GiB.
+Another amount can be specified with `--memory <BYTES>` or `roc run dayX.roc --
+--memory <BYTES>`.
+
+The platform does not deallocate at all. There will be an option to make
+deallocations optional.
+
+As default, both parts are calculated. By using `--part1` or `--part2` only one
+part is calculated.
+
+An roc file can be look like this:
 
 ```roc
 app [solution] {
