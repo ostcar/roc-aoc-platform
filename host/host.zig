@@ -62,11 +62,11 @@ fn rocListAsSlice(rocList: list.RocList) []const u8 {
 
 fn parseOptions() !Options {
     const params = comptime clap.parseParamsComptime(
-        \\-h, --help             Display this help and exit.
+        \\-h, --help            Display this help and exit.
         \\-p, --part1           Run part1.
         \\-q, --part2           Run part2.
-        \\-m, --memory <usize>   Amount of memory to use in byte. Default is 1 GiB.
-        \\-d, --deallocate       Deallocate. Not implemented yet.
+        \\-m, --memory <usize>  Amount of memory to use in byte. Default is 1 GiB.
+        \\-d, --deallocate      Deallocate. Not implemented yet.
         \\
     );
 
