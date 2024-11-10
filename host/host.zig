@@ -37,7 +37,7 @@ pub fn main() void {
     if (options.part1) {
         roc__solutionForHost_1_exposed_generic(&result, Part.part1);
         const took1 = std.fmt.fmtDuration(timer.read());
-        stdout.print("Part1 in {}, used {} bytes:\n{s}\n\n", .{ took1, fba.end_index, rocListAsSlice(result) }) catch unreachable;
+        stdout.print("Part1 in {}, used {} bytes:\n{s}\n\n", .{ took1, std.fmt.fmtIntSizeDec(fba.end_index), rocListAsSlice(result) }) catch unreachable;
 
         fba.reset();
         timer.reset();
@@ -46,7 +46,7 @@ pub fn main() void {
     if (options.part2) {
         roc__solutionForHost_1_exposed_generic(&result, Part.part2);
         const took2 = std.fmt.fmtDuration(timer.read());
-        stdout.print("Part2 in {}, used {} bytes:\n{s}\n", .{ took2, fba.end_index, rocListAsSlice(result) }) catch unreachable;
+        stdout.print("Part2 in {}, used {} bytes:\n{s}\n", .{ took2, std.fmt.fmtIntSizeDec(fba.end_index), rocListAsSlice(result) }) catch unreachable;
     }
 }
 
