@@ -66,7 +66,7 @@ fn parseOptions() !Options {
         \\-p, --part1           Run part1.
         \\-q, --part2           Run part2.
         \\-m, --memory <usize>   Amount of memory to use in byte. Default is 1 GiB.
-        \\-d, --deallocate       Deallocate.
+        \\-d, --deallocate       Deallocate. Not implemented yet.
         \\
     );
 
@@ -100,7 +100,7 @@ const bitsize = @sizeOf(usize);
 
 export fn roc_alloc(size: usize, alignment: u32) [*]u8 {
     _ = alignment;
-    const mem = allocator.alloc(u8, size) catch @panic("roc_alloc: OOM");
+    const mem = allocator.alloc(u8, size) catch std.debug.panic("roc_alloc: OOM tying to use {} bytes", .{used_memory + size});
     used_memory += size;
     return mem.ptr;
 }
