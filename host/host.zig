@@ -1,6 +1,7 @@
 const std = @import("std");
 const str = @import("roc/str.zig");
 const list = @import("roc/list.zig");
+const clap = @import("clap");
 
 const Part = enum(c_int) {
     part1,
@@ -13,29 +14,43 @@ const default_memory_size = 2 << 30;
 var allocator: std.mem.Allocator = undefined;
 var used_memory: usize = 0;
 
-pub fn main() u8 {
+const Options = struct {
+    part1: bool,
+    part2: bool,
+    deallocate: bool,
+    memory: usize,
+};
+
+pub fn main() void {
     const stdout = std.io.getStdOut().writer();
 
-    const buffer = std.heap.page_allocator.alloc(u8, default_memory_size) catch @panic("OOM");
+    const options = parseOptions() catch |err| switch (err) {
+        error.Exit => return,
+        else => @panic("parse options"),
+    };
+
+    const buffer = std.heap.page_allocator.alloc(u8, options.memory) catch @panic("OOM");
     var fba = std.heap.FixedBufferAllocator.init(buffer);
     allocator = fba.allocator();
 
     var result = list.RocList.empty();
     var timer = std.time.Timer.start() catch unreachable;
-    roc__solutionForHost_1_exposed_generic(&result, Part.part1);
-    const took1 = std.fmt.fmtDuration(timer.read());
 
-    stdout.print("Part1 in {}, used {} bytes:\n{s}\n\n", .{ took1, used_memory, rocListAsSlice(result) }) catch unreachable;
+    if (options.part1) {
+        roc__solutionForHost_1_exposed_generic(&result, Part.part1);
+        const took1 = std.fmt.fmtDuration(timer.read());
+        stdout.print("Part1 in {}, used {} bytes:\n{s}\n\n", .{ took1, used_memory, rocListAsSlice(result) }) catch unreachable;
 
-    fba.reset();
-    used_memory = 0;
+        fba.reset();
+        used_memory = 0;
+        timer.reset();
+    }
 
-    timer.reset();
-    roc__solutionForHost_1_exposed_generic(&result, Part.part2);
-    const took2 = std.fmt.fmtDuration(timer.read());
-
-    stdout.print("Part2 in {}, used {} bytes:\n{s}\n", .{ took2, used_memory, rocListAsSlice(result) }) catch unreachable;
-    return 0;
+    if (options.part2) {
+        roc__solutionForHost_1_exposed_generic(&result, Part.part2);
+        const took2 = std.fmt.fmtDuration(timer.read());
+        stdout.print("Part2 in {}, used {} bytes:\n{s}\n", .{ took2, used_memory, rocListAsSlice(result) }) catch unreachable;
+    }
 }
 
 fn rocListAsSlice(rocList: list.RocList) []const u8 {
@@ -43,6 +58,38 @@ fn rocListAsSlice(rocList: list.RocList) []const u8 {
         return bytes[0..rocList.len()];
     }
     return "";
+}
+
+fn parseOptions() !Options {
+    const params = comptime clap.parseParamsComptime(
+        \\-h, --help             Display this help and exit.
+        \\-p, --part1           Run part1.
+        \\-q, --part2           Run part2.
+        \\-m, --memory <usize>   Amount of memory to use in byte. Default is 1 GiB.
+        \\-d, --deallocate       Deallocate.
+        \\
+    );
+
+    var buffer: [0]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+    allocator = fba.allocator();
+
+    var res = try clap.parse(clap.Help, &params, clap.parsers.default, .{ .allocator = allocator });
+    defer res.deinit();
+
+    if (res.args.help != 0) {
+        try clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{});
+        return error.Exit;
+    }
+
+    const both = res.args.part1 == 0 and res.args.part2 == 0;
+
+    return Options{
+        .part1 = res.args.part1 != 0 or both,
+        .part2 = res.args.part2 != 0 or both,
+        .deallocate = res.args.deallocate != 0,
+        .memory = res.args.memory orelse default_memory_size,
+    };
 }
 
 // Roc memory stuff

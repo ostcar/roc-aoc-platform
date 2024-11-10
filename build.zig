@@ -36,6 +36,9 @@ fn buildDynhost(b: *Build, optimize: std.builtin.OptimizeMode) void {
     dynhost.root_module.stack_check = false;
     dynhost.addObjectFile(libapp_filename);
 
+    const clap = b.dependency("clap", .{});
+    dynhost.root_module.addImport("clap", clap.module("clap"));
+
     // Copy dynhost to platform
     const copy_dynhost = b.addWriteFiles();
     copy_dynhost.addCopyFileToSource(dynhost.getEmittedBin(), "platform/dynhost");
@@ -60,6 +63,8 @@ fn buildLegacy(b: *Build, optimize: std.builtin.OptimizeMode) !void {
         .{ .cpu_arch = .x86_64, .os_tag = .linux },
     };
 
+    const clap = b.dependency("clap", .{});
+
     for (targets) |target| {
         const lib = b.addStaticLibrary(.{
             .name = "linux-x86",
@@ -71,6 +76,8 @@ fn buildLegacy(b: *Build, optimize: std.builtin.OptimizeMode) !void {
 
         lib.root_module.stack_check = false;
         lib.pie = true;
+
+        lib.root_module.addImport("clap", clap.module("clap"));
 
         const os_name = @tagName(target.os_tag.?);
         const cpu_name = switch (target.cpu_arch.?) {
