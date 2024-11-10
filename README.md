@@ -16,7 +16,7 @@ An roc file can be look like this:
 
 ```roc
 app [solution] {
-    pf: platform "https://github.com/ostcar/roc-aoc-platform/releases/download/v0.0.1/neSojGToSZSAr3hb3DAgXe2sQZR4RhMKEErdh1PJVi4.tar.br",
+    pf: platform "https://github.com/ostcar/roc-aoc-platform/releases/download/v0.0.2/2Nf8SjH56jqpVp0uor3rqpUxS6ZuCDfeti_nzMn3_T4.tar.br",
 }
 
 import "day.input" as puzzleInput : List U8
