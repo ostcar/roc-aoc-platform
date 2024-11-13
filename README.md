@@ -6,8 +6,8 @@ The platform staticly allocates memory on startup. The default is one GiB.
 Another amount can be specified with `--memory <BYTES>` or `roc run dayX.roc --
 --memory <BYTES>`.
 
-The platform does not deallocate at all. There will be an option to make
-deallocations optional.
+The platform does not deallocate as default. Use `--deallocate` to activate
+deallocations.
 
 As default, both parts are calculated. By using `--part1` or `--part2` only one
 part is calculated.
