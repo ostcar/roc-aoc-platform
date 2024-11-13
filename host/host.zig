@@ -93,8 +93,6 @@ fn parseOptions() !Options {
 }
 
 // Roc memory stuff
-const bitsize = @sizeOf(usize);
-
 export fn roc_alloc(size: usize, alignment: u32) [*]u8 {
     if (deallocate)
         return alloc_with_len(size, alignment)
