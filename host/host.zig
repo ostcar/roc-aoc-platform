@@ -39,7 +39,7 @@ pub fn main() void {
     if (options.part1) {
         roc__solutionForHost_1_exposed_generic(&result, Part.part1);
         const took1 = std.fmt.fmtDuration(timer.read());
-        stdout.print("Part1 in {}, used {} bytes:\n{s}\n\n", .{ took1, std.fmt.fmtIntSizeDec(fba.end_index), rocListAsSlice(result) }) catch unreachable;
+        stdout.print("Part1 in {}, used {} of memory:\n{s}\n\n", .{ took1, std.fmt.fmtIntSizeDec(fba.end_index), rocListAsSlice(result) }) catch unreachable;
 
         fba.reset();
         timer.reset();
@@ -96,12 +96,16 @@ fn parseOptions() !Options {
 const bitsize = @sizeOf(usize);
 
 export fn roc_alloc(size: usize, alignment: u32) [*]u8 {
-    _ = alignment;
-    // alignment has to be 16 since alignedAlloc expects a comptime value and only 16 can support all types.
-    const mem = allocator.alignedAlloc(u8, 16, size) catch {
+    const v = if (alignment <= 8)
+        allocator.alignedAlloc(u8, 8, size)
+    else
+        allocator.alignedAlloc(u8, 16, size);
+
+    if (v) |s| {
+        return s.ptr;
+    } else |_| {
         std.debug.panic("roc_alloc: OOM", .{});
-    };
-    return mem.ptr;
+    }
 }
 
 export fn roc_realloc(ptr: [*]u8, new_size: usize, old_size: usize, alignment: u32) [*]u8 {
