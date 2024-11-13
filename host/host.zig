@@ -130,8 +130,10 @@ export fn roc_realloc(ptr: [*]u8, new_size: usize, old_size: usize, alignment: u
     const real_new_size = if (deallocate) new_size + zig_alignment else new_size;
 
     if (allocator.resize(slice, real_new_size)) {
-        const size_pointer: [*]usize = @ptrCast(@alignCast(ptr - zig_alignment));
-        size_pointer[0] = new_size;
+        if (deallocate) {
+            const size_pointer: [*]usize = @ptrCast(@alignCast(ptr - zig_alignment));
+            size_pointer[0] = new_size;
+        }
         return ptr;
     }
 
