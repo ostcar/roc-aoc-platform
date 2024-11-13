@@ -11,6 +11,7 @@ const Part = enum(c_int) {
 extern fn roc__solutionForHost_1_exposed_generic(*list.RocList, Part) void;
 
 var allocator: std.mem.Allocator = undefined;
+var deallocate = false;
 
 const Options = struct {
     part1: bool,
@@ -30,6 +31,7 @@ pub fn main() void {
     const buffer = std.heap.page_allocator.alloc(u8, options.memory) catch @panic("OOM");
     var fba = std.heap.FixedBufferAllocator.init(buffer);
     allocator = fba.allocator();
+    deallocate = options.deallocate;
 
     var result = list.RocList.empty();
     var timer = std.time.Timer.start() catch unreachable;
@@ -95,8 +97,8 @@ const bitsize = @sizeOf(usize);
 
 export fn roc_alloc(size: usize, alignment: u32) [*]u8 {
     _ = alignment;
-    // TODO: use alignment. I was not able to convert the u32 value to a u29 value.
-    const mem = allocator.alignedAlloc(u8, bitsize, size) catch {
+    // alignment has to be 16 since alignedAlloc expects a comptime value and only 16 can support all types.
+    const mem = allocator.alignedAlloc(u8, 16, size) catch {
         std.debug.panic("roc_alloc: OOM", .{});
     };
     return mem.ptr;
