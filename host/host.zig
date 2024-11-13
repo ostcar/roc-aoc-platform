@@ -48,7 +48,7 @@ pub fn main() void {
     if (options.part2) {
         roc__solutionForHost_1_exposed_generic(&result, Part.part2);
         const took2 = std.fmt.fmtDuration(timer.read());
-        stdout.print("Part2 in {}, used {} bytes:\n{s}\n", .{ took2, std.fmt.fmtIntSizeDec(fba.end_index), rocListAsSlice(result) }) catch unreachable;
+        stdout.print("Part2 in {}, used {} of memory:\n{s}\n", .{ took2, std.fmt.fmtIntSizeDec(fba.end_index), rocListAsSlice(result) }) catch unreachable;
     }
 }
 
