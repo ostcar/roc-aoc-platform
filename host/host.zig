@@ -11,12 +11,12 @@ const Part = enum(c_int) {
 extern fn roc__solutionForHost_1_exposed_generic(*list.RocList, Part) void;
 
 var allocator: std.mem.Allocator = undefined;
-var deallocate = false;
+var skip_deallocate = false;
 
 const Options = struct {
     part1: bool,
     part2: bool,
-    deallocate: bool,
+    skip_deallocate: bool,
     memory: usize,
 };
 
@@ -31,7 +31,7 @@ pub fn main() void {
     const buffer = std.heap.page_allocator.alloc(u8, options.memory) catch @panic("OOM");
     var fba = std.heap.FixedBufferAllocator.init(buffer);
     allocator = fba.allocator();
-    deallocate = options.deallocate;
+    skip_deallocate = options.skip_deallocate;
 
     var result = list.RocList.empty();
     var timer = std.time.Timer.start() catch unreachable;
@@ -66,7 +66,7 @@ fn parseOptions() !Options {
         \\-p, --part1           Run part1.
         \\-q, --part2           Run part2.
         \\-m, --memory <usize>  Amount of memory to use in byte. Default is 1 GiB.
-        \\-d, --deallocate      Activate deallocations. Uses less memory but could be slower.
+        \\-d, --skip-deallocate Deactivate deallocations. Uses less memory. Can sometime be a bit faster.
         \\
     );
 
@@ -87,17 +87,17 @@ fn parseOptions() !Options {
     return Options{
         .part1 = res.args.part1 != 0 or both,
         .part2 = res.args.part2 != 0 or both,
-        .deallocate = res.args.deallocate != 0,
+        .skip_deallocate = res.args.@"skip-deallocate" != 0,
         .memory = res.args.memory orelse default_memory_size,
     };
 }
 
 // Roc memory stuff
 export fn roc_alloc(size: usize, alignment: u32) [*]u8 {
-    if (deallocate)
-        return alloc_with_len(size, alignment)
+    if (skip_deallocate)
+        return alloc_without_len(size, alignment)
     else
-        return alloc_without_len(size, alignment);
+        return alloc_with_len(size, alignment);
 }
 
 fn alloc_with_len(size: usize, alignment: u32) [*]u8 {
@@ -124,11 +124,11 @@ fn alloc_without_len(size: usize, alignment: u32) [*]u8 {
 
 export fn roc_realloc(ptr: [*]u8, new_size: usize, old_size: usize, alignment: u32) [*]u8 {
     const zig_alignment: u32 = if (alignment <= 8) 8 else 16;
-    const slice = if (deallocate) (ptr - zig_alignment)[0 .. old_size + zig_alignment] else ptr[0..old_size];
-    const real_new_size = if (deallocate) new_size + zig_alignment else new_size;
+    const slice = if (skip_deallocate) ptr[0..old_size] else (ptr - zig_alignment)[0 .. old_size + zig_alignment];
+    const real_new_size = if (skip_deallocate) new_size else new_size + zig_alignment;
 
     if (allocator.resize(slice, real_new_size)) {
-        if (deallocate) {
+        if (!skip_deallocate) {
             const size_pointer: [*]usize = @ptrCast(@alignCast(ptr - zig_alignment));
             size_pointer[0] = new_size;
         }
@@ -144,7 +144,7 @@ export fn roc_realloc(ptr: [*]u8, new_size: usize, old_size: usize, alignment: u
 }
 
 export fn roc_dealloc(ptr: [*]u8, alignment: u32) void {
-    if (!deallocate) return;
+    if (skip_deallocate) return;
 
     const zig_alignment: u32 = if (alignment <= 8) 8 else 16;
     const size_pointer: [*]usize = @ptrCast(@alignCast(ptr - zig_alignment));
