@@ -1,10 +1,14 @@
 platform "aoc"
-    requires {} { solution : [Part1, Part2] -> List U8 }
+    requires {} { part1 : Str -> List U8, part2 : Str -> List U8 }
     exposes []
     packages {}
     imports []
-    provides [solutionForHost]
+    provides [part1ForHost, part2ForHost]
 
-solutionForHost : [Part1, Part2] -> List U8
-solutionForHost = \part ->
-    solution part
+part1ForHost : Str -> List U8
+part1ForHost = \input ->
+    part1 input
+
+part2ForHost : Str -> List U8
+part2ForHost = \input ->
+    part2 input

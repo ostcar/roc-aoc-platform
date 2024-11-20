@@ -3,41 +3,42 @@ const str = @import("roc/str.zig");
 const list = @import("roc/list.zig");
 const clap = @import("clap");
 
-const Part = enum(c_int) {
-    part1,
-    part2,
-};
+extern fn roc__part1ForHost_1_exposed_generic(*list.RocList, *const str.RocStr) void;
+extern fn roc__part2ForHost_1_exposed_generic(*list.RocList, *const str.RocStr) void;
 
-extern fn roc__solutionForHost_1_exposed_generic(*list.RocList, Part) void;
+const input_buffer_size = 2 << 20;
 
-var allocator: std.mem.Allocator = undefined;
-var deallocate = false;
+var global_allocator: std.mem.Allocator = undefined;
+var skip_deallocate = false;
 
 const Options = struct {
     part1: bool,
     part2: bool,
-    deallocate: bool,
+    skip_deallocate: bool,
     memory: usize,
+    puzzle_input: []u8,
 };
 
 pub fn main() void {
     const stdout = std.io.getStdOut().writer();
 
-    const options = parseOptions() catch |err| switch (err) {
+    var input_buffer: [input_buffer_size]u8 = undefined;
+    const options = parseOptions(&input_buffer) catch |err| switch (err) {
         error.Exit => return,
-        else => @panic("parse options"),
+        else => std.debug.panic("parsing options: {any}", .{err}),
     };
 
-    const buffer = std.heap.page_allocator.alloc(u8, options.memory) catch @panic("OOM");
-    var fba = std.heap.FixedBufferAllocator.init(buffer);
-    allocator = fba.allocator();
-    deallocate = options.deallocate;
+    const roc_memory_buffer = std.heap.page_allocator.alloc(u8, options.memory) catch @panic("OOM");
+    var fba = std.heap.FixedBufferAllocator.init(roc_memory_buffer);
+    global_allocator = fba.allocator();
+    skip_deallocate = options.skip_deallocate;
 
     var result = list.RocList.empty();
     var timer = std.time.Timer.start() catch unreachable;
 
     if (options.part1) {
-        roc__solutionForHost_1_exposed_generic(&result, Part.part1);
+        const aoc_input = str.RocStr.fromSlice(options.puzzle_input);
+        roc__part1ForHost_1_exposed_generic(&result, &aoc_input);
         const took1 = std.fmt.fmtDuration(timer.read());
         stdout.print("Part1 in {}, used {} of memory:\n{s}\n\n", .{ took1, std.fmt.fmtIntSizeDec(fba.end_index), rocListAsSlice(result) }) catch unreachable;
 
@@ -46,7 +47,8 @@ pub fn main() void {
     }
 
     if (options.part2) {
-        roc__solutionForHost_1_exposed_generic(&result, Part.part2);
+        const aoc_input = str.RocStr.fromSlice(options.puzzle_input);
+        roc__part2ForHost_1_exposed_generic(&result, &aoc_input);
         const took2 = std.fmt.fmtDuration(timer.read());
         stdout.print("Part2 in {}, used {} of memory:\n{s}\n", .{ took2, std.fmt.fmtIntSizeDec(fba.end_index), rocListAsSlice(result) }) catch unreachable;
     }
@@ -59,22 +61,26 @@ fn rocListAsSlice(rocList: list.RocList) []const u8 {
     return "";
 }
 
-fn parseOptions() !Options {
+fn parseOptions(buffer: []u8) !Options {
     const default_memory_size = 2 << 30;
     const params = comptime clap.parseParamsComptime(
         \\-h, --help            Display this help and exit.
         \\-p, --part1           Run part1.
         \\-q, --part2           Run part2.
         \\-m, --memory <usize>  Amount of memory to use in byte. Default is 1 GiB.
-        \\-d, --deallocate      Activate deallocations. Uses less memory but could be slower.
+        \\-d, --skip-deallocate Deactivate deallocations. Uses less memory. Can sometime be a bit faster.
+        \\<str>                 Input file. `-` for stdin. The default is a `.input` file next to the roc script.
         \\
     );
 
-    var buffer: [0]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-    allocator = fba.allocator();
+    var file_name_buffer: [255]u8 = undefined; // This is for the optional input file name.
+    var fba = std.heap.FixedBufferAllocator.init(&file_name_buffer);
+    const allocator = fba.allocator();
 
-    var res = try clap.parse(clap.Help, &params, clap.parsers.default, .{ .allocator = allocator });
+    var res = clap.parse(clap.Help, &params, clap.parsers.default, .{ .allocator = allocator }) catch {
+        try clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{});
+        return error.Exit;
+    };
     defer res.deinit();
 
     if (res.args.help != 0) {
@@ -82,22 +88,62 @@ fn parseOptions() !Options {
         return error.Exit;
     }
 
-    const both = res.args.part1 == 0 and res.args.part2 == 0;
+    const both_parts = res.args.part1 == 0 and res.args.part2 == 0;
+
+    const file_name: ?[]const u8 = if (res.positionals.len > 0)
+        if (std.mem.eql(u8, res.positionals[0], "-"))
+            null
+        else
+            res.positionals[0]
+    else blk: {
+        const command = res.exe_arg orelse unreachable;
+        var buf: [255]u8 = undefined; // This is for the command name + .input
+        const size = inputExtension(command, &buf);
+        break :blk buf[0..size];
+    };
+
+    var input_content = try readInput(file_name, buffer);
+    if (input_content[input_content.len - 1] == '\n') {
+        input_content = input_content[0 .. input_content.len - 1];
+    }
 
     return Options{
-        .part1 = res.args.part1 != 0 or both,
-        .part2 = res.args.part2 != 0 or both,
-        .deallocate = res.args.deallocate != 0,
+        .part1 = res.args.part1 != 0 or both_parts,
+        .part2 = res.args.part2 != 0 or both_parts,
+        .skip_deallocate = res.args.@"skip-deallocate" != 0,
         .memory = res.args.memory orelse default_memory_size,
+        .puzzle_input = input_content,
     };
+}
+
+fn inputExtension(orig_path: []const u8, buffer: []u8) usize {
+    const new_extension = ".input";
+    const extension = std.fs.path.extension(orig_path);
+    const clean_len = orig_path.len - extension.len;
+    @memcpy(buffer[0..clean_len], orig_path[0..clean_len]);
+    @memcpy(buffer[clean_len..][0..new_extension.len], new_extension);
+    return clean_len + new_extension.len;
+}
+
+fn readInput(may_file_name: ?[]const u8, buffer: []u8) ![]u8 {
+    if (may_file_name) |file_name| {
+        return std.fs.cwd().readFile(file_name, buffer) catch |err|
+            switch (err) {
+            error.FileNotFound => std.debug.panic("Can not find input file {s}", .{file_name}),
+            else => err,
+        };
+    }
+
+    const size = try std.io.getStdIn().readAll(buffer);
+    return buffer[0..size];
 }
 
 // Roc memory stuff
 export fn roc_alloc(size: usize, alignment: u32) [*]u8 {
-    if (deallocate)
-        return alloc_with_len(size, alignment)
+    if (skip_deallocate)
+        return alloc_without_len(size, alignment)
     else
-        return alloc_without_len(size, alignment);
+        return alloc_with_len(size, alignment);
 }
 
 fn alloc_with_len(size: usize, alignment: u32) [*]u8 {
@@ -111,9 +157,9 @@ fn alloc_with_len(size: usize, alignment: u32) [*]u8 {
 
 fn alloc_without_len(size: usize, alignment: u32) [*]u8 {
     const v = if (alignment <= 8)
-        allocator.alignedAlloc(u8, 8, size)
+        global_allocator.alignedAlloc(u8, 8, size)
     else
-        allocator.alignedAlloc(u8, 16, size);
+        global_allocator.alignedAlloc(u8, 16, size);
 
     if (v) |s| {
         return s.ptr;
@@ -124,11 +170,11 @@ fn alloc_without_len(size: usize, alignment: u32) [*]u8 {
 
 export fn roc_realloc(ptr: [*]u8, new_size: usize, old_size: usize, alignment: u32) [*]u8 {
     const zig_alignment: u32 = if (alignment <= 8) 8 else 16;
-    const slice = if (deallocate) (ptr - zig_alignment)[0 .. old_size + zig_alignment] else ptr[0..old_size];
-    const real_new_size = if (deallocate) new_size + zig_alignment else new_size;
+    const slice = if (skip_deallocate) ptr[0..old_size] else (ptr - zig_alignment)[0 .. old_size + zig_alignment];
+    const real_new_size = if (skip_deallocate) new_size else new_size + zig_alignment;
 
-    if (allocator.resize(slice, real_new_size)) {
-        if (deallocate) {
+    if (global_allocator.resize(slice, real_new_size)) {
+        if (!skip_deallocate) {
             const size_pointer: [*]usize = @ptrCast(@alignCast(ptr - zig_alignment));
             size_pointer[0] = new_size;
         }
@@ -144,13 +190,13 @@ export fn roc_realloc(ptr: [*]u8, new_size: usize, old_size: usize, alignment: u
 }
 
 export fn roc_dealloc(ptr: [*]u8, alignment: u32) void {
-    if (!deallocate) return;
+    if (skip_deallocate) return;
 
     const zig_alignment: u32 = if (alignment <= 8) 8 else 16;
     const size_pointer: [*]usize = @ptrCast(@alignCast(ptr - zig_alignment));
     const size = size_pointer[0];
     const real_size = size + zig_alignment;
-    allocator.free(@as([*]u8, @ptrCast(size_pointer))[0..real_size]);
+    global_allocator.free(@as([*]u8, @ptrCast(size_pointer))[0..real_size]);
 }
 
 export fn roc_panic(msg: *str.RocStr, tag_id: u32) callconv(.C) void {
