@@ -11,6 +11,8 @@ Another amount can be specified with `--memory <BYTES>` or `roc run dayX.roc -- 
 As default, both parts are calculated. By using `--part1` or `--part2` only one
 part is calculated.
 
+For an example Repository, see: https://github.com/ostcar/aoc2024
+
 An roc file can be look like this:
 
 ```roc
