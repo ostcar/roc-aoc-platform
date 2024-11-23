@@ -8,7 +8,7 @@ const RocAllocator = @import("RocAllocator.zig");
 extern fn roc__part1ForHost_1_exposed_generic(*list.RocList, *const str.RocStr) void;
 extern fn roc__part2ForHost_1_exposed_generic(*list.RocList, *const str.RocStr) void;
 
-const input_buffer_size = 2 << 20;
+const input_buffer_size = 1 << 20;
 
 var roc_allocator: RocAllocator = undefined;
 
@@ -68,7 +68,7 @@ fn rocListAsSlice(rocList: list.RocList) []const u8 {
 }
 
 fn parseOptions(buffer: []u8) !Options {
-    const default_memory_size = 2 << 30;
+    const default_memory_size = 1 << 30;
     const params = comptime clap.parseParamsComptime(
         \\-h, --help            Display this help and exit.
         \\-p, --part1           Run part1.
