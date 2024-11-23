@@ -3,13 +3,14 @@ const str = @import("roc/str.zig");
 const list = @import("roc/list.zig");
 const clap = @import("clap");
 
+const RocAllocator = @import("RocAllocator.zig");
+
 extern fn roc__part1ForHost_1_exposed_generic(*list.RocList, *const str.RocStr) void;
 extern fn roc__part2ForHost_1_exposed_generic(*list.RocList, *const str.RocStr) void;
 
 const input_buffer_size = 2 << 20;
 
-var global_allocator: std.mem.Allocator = undefined;
-var skip_deallocate = false;
+var roc_allocator: RocAllocator = undefined;
 
 const Options = struct {
     part1: bool,
@@ -30,8 +31,7 @@ pub fn main() void {
 
     const roc_memory_buffer = std.heap.page_allocator.alloc(u8, options.memory) catch @panic("OOM");
     var fba = std.heap.FixedBufferAllocator.init(roc_memory_buffer);
-    global_allocator = fba.allocator();
-    skip_deallocate = options.skip_deallocate;
+    roc_allocator = RocAllocator{ .allocator = fba.allocator() };
 
     var result = list.RocList.empty();
     var timer = std.time.Timer.start() catch unreachable;
@@ -40,7 +40,10 @@ pub fn main() void {
         const aoc_input = str.RocStr.fromSlice(options.puzzle_input);
         roc__part1ForHost_1_exposed_generic(&result, &aoc_input);
         const took1 = std.fmt.fmtDuration(timer.read());
-        stdout.print("Part1 in {}, used {} of memory:\n{s}\n\n", .{ took1, std.fmt.fmtIntSizeDec(fba.end_index), rocListAsSlice(result) }) catch unreachable;
+        stdout.print(
+            "Part1 in {}, used {} of memory:\n{s}\n\n",
+            .{ took1, std.fmt.fmtIntSizeDec(fba.end_index), rocListAsSlice(result) },
+        ) catch unreachable;
 
         fba.reset();
         timer.reset();
@@ -50,7 +53,10 @@ pub fn main() void {
         const aoc_input = str.RocStr.fromSlice(options.puzzle_input);
         roc__part2ForHost_1_exposed_generic(&result, &aoc_input);
         const took2 = std.fmt.fmtDuration(timer.read());
-        stdout.print("Part2 in {}, used {} of memory:\n{s}\n", .{ took2, std.fmt.fmtIntSizeDec(fba.end_index), rocListAsSlice(result) }) catch unreachable;
+        stdout.print(
+            "Part2 in {}, used {} of memory:\n{s}\n",
+            .{ took2, std.fmt.fmtIntSizeDec(fba.end_index), rocListAsSlice(result) },
+        ) catch unreachable;
     }
 }
 
@@ -140,63 +146,15 @@ fn readInput(may_file_name: ?[]const u8, buffer: []u8) ![]u8 {
 
 // Roc memory stuff
 export fn roc_alloc(size: usize, alignment: u32) [*]u8 {
-    if (skip_deallocate)
-        return alloc_without_len(size, alignment)
-    else
-        return alloc_with_len(size, alignment);
-}
-
-fn alloc_with_len(size: usize, alignment: u32) [*]u8 {
-    const zig_alignment: u32 = if (alignment <= 8) 8 else 16;
-    const size_with_len = size + zig_alignment;
-    const ptr = alloc_without_len(size_with_len, alignment);
-    const as_usize: [*]usize = @ptrCast(@alignCast(ptr));
-    as_usize[0] = size;
-    return ptr + zig_alignment;
-}
-
-fn alloc_without_len(size: usize, alignment: u32) [*]u8 {
-    const v = if (alignment <= 8)
-        global_allocator.alignedAlloc(u8, 8, size)
-    else
-        global_allocator.alignedAlloc(u8, 16, size);
-
-    if (v) |s| {
-        return s.ptr;
-    } else |_| {
-        std.debug.panic("roc_alloc: OOM", .{});
-    }
+    return roc_allocator.alloc(size, alignment) catch std.debug.panic("panic: OOM", .{});
 }
 
 export fn roc_realloc(ptr: [*]u8, new_size: usize, old_size: usize, alignment: u32) [*]u8 {
-    const zig_alignment: u32 = if (alignment <= 8) 8 else 16;
-    const slice = if (skip_deallocate) ptr[0..old_size] else (ptr - zig_alignment)[0 .. old_size + zig_alignment];
-    const real_new_size = if (skip_deallocate) new_size else new_size + zig_alignment;
-
-    if (global_allocator.resize(slice, real_new_size)) {
-        if (!skip_deallocate) {
-            const size_pointer: [*]usize = @ptrCast(@alignCast(ptr - zig_alignment));
-            size_pointer[0] = new_size;
-        }
-        return ptr;
-    }
-
-    const new_ptr = roc_alloc(new_size, alignment);
-    const copy_size = @min(old_size, new_size);
-    @memcpy(new_ptr[0..copy_size], ptr[0..copy_size]);
-
-    roc_dealloc(ptr, alignment);
-    return new_ptr;
+    return roc_allocator.realloc(ptr, new_size, old_size, alignment) catch std.debug.panic("panic: OOM", .{});
 }
 
 export fn roc_dealloc(ptr: [*]u8, alignment: u32) void {
-    if (skip_deallocate) return;
-
-    const zig_alignment: u32 = if (alignment <= 8) 8 else 16;
-    const size_pointer: [*]usize = @ptrCast(@alignCast(ptr - zig_alignment));
-    const size = size_pointer[0];
-    const real_size = size + zig_alignment;
-    global_allocator.free(@as([*]u8, @ptrCast(size_pointer))[0..real_size]);
+    roc_allocator.dealloc(ptr, alignment);
 }
 
 export fn roc_panic(msg: *str.RocStr, tag_id: u32) callconv(.C) void {
