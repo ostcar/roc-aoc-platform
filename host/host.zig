@@ -30,7 +30,7 @@ pub fn main() void {
     const options = switch (options_or_exit) {
         OptionsOrExit.fileNotFound => |file_name| {
             stderr.print(
-                \\ I can not find the input file. I was looking at it at `{s}`.
+                \\ I can not find the input file. I was looking for it at `{s}`.
                 \\
                 \\ You can specify an input file by providing the filename as an argument. For example:
                 \\
