@@ -17,16 +17,41 @@ const Options = struct {
     part2: bool,
     skip_deallocate: bool,
     memory: usize,
-    puzzle_input: []u8,
+    puzzle_input: []const u8,
 };
 
 pub fn main() void {
     const stdout = std.io.getStdOut().writer();
+    const stderr = std.io.getStdErr().writer();
 
     var input_buffer: [input_buffer_size]u8 = undefined;
-    const options = parseOptions(&input_buffer) catch |err| switch (err) {
-        error.Exit => return,
-        else => std.debug.panic("parsing options: {any}", .{err}),
+    const options_or_exit = parseOptions(&input_buffer) catch |err| std.debug.panic("parsing options: {any}", .{err});
+
+    const options = switch (options_or_exit) {
+        OptionsOrExit.fileNotFound => |file_name| {
+            stderr.print(
+                \\ I can not find the input file. I was looking at it at `{s}`.
+                \\
+                \\ You can specify an input file by providing the filename as an argument. For example:
+                \\
+                \\ $ roc my_day.roc -- input_file.txt
+                \\
+                \\ or
+                \\
+                \\ $ roc build my_day.roc 
+                \\ $ ./my_day input_file.txt
+                \\
+                \\ When you use `-` as filename, then I read the content from stdin.
+                \\
+                \\ When no filename is speficied, I am looking for an input file next to the Roc file, but with the file-extension `.input`.
+                \\
+            ,
+                .{file_name},
+            ) catch unreachable;
+            return;
+        },
+        OptionsOrExit.exit => return,
+        OptionsOrExit.options => |options| options,
     };
 
     const roc_memory_buffer = std.heap.page_allocator.alloc(u8, options.memory) catch @panic("OOM");
@@ -67,7 +92,13 @@ fn rocListAsSlice(rocList: list.RocList) []const u8 {
     return "";
 }
 
-fn parseOptions(buffer: []u8) !Options {
+const OptionsOrExit = union(enum) {
+    options: Options,
+    fileNotFound: []const u8,
+    exit,
+};
+
+fn parseOptions(buffer: []u8) !OptionsOrExit {
     const default_memory_size = 1 << 30;
     const params = comptime clap.parseParamsComptime(
         \\-h, --help            Display this help and exit.
@@ -85,13 +116,13 @@ fn parseOptions(buffer: []u8) !Options {
 
     var res = clap.parse(clap.Help, &params, clap.parsers.default, .{ .allocator = allocator }) catch {
         try clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{});
-        return error.Exit;
+        return OptionsOrExit.exit;
     };
     defer res.deinit();
 
     if (res.args.help != 0) {
         try clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{});
-        return error.Exit;
+        return OptionsOrExit.exit;
     }
 
     const both_parts = res.args.part1 == 0 and res.args.part2 == 0;
@@ -108,18 +139,19 @@ fn parseOptions(buffer: []u8) !Options {
         break :blk buf[0..size];
     };
 
-    var input_content = try readInput(file_name, buffer);
-    if (input_content[input_content.len - 1] == '\n') {
-        input_content = input_content[0 .. input_content.len - 1];
-    }
+    const content_or_error = try readInput(file_name, buffer);
+    const content = switch (content_or_error) {
+        ContentOrFileNotFound.fileNotFound => |f| return OptionsOrExit{ .fileNotFound = f },
+        ContentOrFileNotFound.content => |content| content,
+    };
 
-    return Options{
+    return OptionsOrExit{ .options = Options{
         .part1 = res.args.part1 != 0 or both_parts,
         .part2 = res.args.part2 != 0 or both_parts,
         .skip_deallocate = res.args.@"skip-deallocate" != 0,
         .memory = res.args.memory orelse default_memory_size,
-        .puzzle_input = input_content,
-    };
+        .puzzle_input = content,
+    } };
 }
 
 fn inputExtension(orig_path: []const u8, buffer: []u8) usize {
@@ -131,17 +163,28 @@ fn inputExtension(orig_path: []const u8, buffer: []u8) usize {
     return clean_len + new_extension.len;
 }
 
-fn readInput(may_file_name: ?[]const u8, buffer: []u8) ![]u8 {
-    if (may_file_name) |file_name| {
-        return std.fs.cwd().readFile(file_name, buffer) catch |err|
-            switch (err) {
-            error.FileNotFound => std.debug.panic("Can not find input file {s}", .{file_name}),
+const ContentOrFileNotFound = union(enum) {
+    content: []const u8,
+    fileNotFound: []const u8,
+};
+
+fn readInput(may_file_name: ?[]const u8, buffer: []u8) !ContentOrFileNotFound {
+    var content = if (may_file_name) |file_name| blk: {
+        break :blk std.fs.cwd().readFile(file_name, buffer) catch |err|
+            return switch (err) {
+            error.FileNotFound => ContentOrFileNotFound{ .fileNotFound = file_name },
             else => err,
         };
+    } else blk: {
+        const size = try std.io.getStdIn().readAll(buffer);
+        break :blk buffer[0..size];
+    };
+
+    if (content[content.len - 1] == '\n') {
+        content = content[0 .. content.len - 1];
     }
 
-    const size = try std.io.getStdIn().readAll(buffer);
-    return buffer[0..size];
+    return ContentOrFileNotFound{ .content = content };
 }
 
 // Roc memory stuff
