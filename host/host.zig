@@ -7,8 +7,8 @@ const RocResultStr = @import("RocResult.zig").RocResult(str.RocStr, str.RocStr);
 
 const RocAllocator = @import("RocAllocator.zig");
 
-extern fn roc__part1ForHost_1_exposed_generic(*RocResultStr, *const str.RocStr) void;
-extern fn roc__part2ForHost_1_exposed_generic(*RocResultStr, *const str.RocStr) void;
+extern fn roc__part1ForHost_1_exposed_generic(*RocResultStr, *const str.RocStr) callconv(.C) void;
+extern fn roc__part2ForHost_1_exposed_generic(*RocResultStr, *const str.RocStr) callconv(.C) void;
 
 const input_buffer_size = 1 << 20;
 
@@ -41,13 +41,13 @@ pub fn main() void {
     roc_allocator = RocAllocator{ .allocator = fba.allocator() };
 
     if (options.part1) {
-        runPart("part1", fba, options);
+        runPart("part1", roc__part1ForHost_1_exposed_generic, fba, options);
 
         fba.reset();
     }
 
     if (options.part2) {
-        runPart("part2", fba, options);
+        runPart("part2", roc__part2ForHost_1_exposed_generic, fba, options);
     }
 }
 
@@ -69,7 +69,7 @@ const fileNotFoundMessage =
     \\
 ;
 
-fn runPart(name: []const u8, fba: std.heap.FixedBufferAllocator, options: Options) void {
+fn runPart(name: []const u8, func: fn (*RocResultStr, *const str.RocStr) callconv(.C) void, fba: std.heap.FixedBufferAllocator, options: Options) void {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
 
@@ -77,7 +77,7 @@ fn runPart(name: []const u8, fba: std.heap.FixedBufferAllocator, options: Option
     var result: RocResultStr = undefined;
 
     var timer = std.time.Timer.start() catch unreachable;
-    roc__part1ForHost_1_exposed_generic(&result, &aoc_input);
+    func(&result, &aoc_input);
 
     const took = std.fmt.fmtDuration(timer.read());
     if (result.isOk()) {

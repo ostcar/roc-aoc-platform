@@ -17,5 +17,4 @@ part2ForHost = \input ->
 
 errToStr : Result Str _ -> Result Str Str
 errToStr = \r ->
-    r
-    |> Result.mapErr Inspect.toStr
+    r |> Result.mapErr Inspect.toStr
