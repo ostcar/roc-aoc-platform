@@ -10,7 +10,6 @@ expect part1 examplePart1 == Ok "the example for part 1"
 part1 = \input ->
     input
     |> Ok
-    |> Result.mapErr \_ -> ThisLineIsNecessaryForRoc
 
 examplePart2 =
     "example for part 2"

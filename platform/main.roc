@@ -17,4 +17,7 @@ part2ForHost = \input ->
 
 errToStr : Result Str _ -> Result Str Str
 errToStr = \r ->
-    r |> Result.mapErr Inspect.toStr
+    when r is
+        Ok v -> Ok v
+        Err ThisLineIsNecessary -> Err (Inspect.toStr ThisLineIsNecessary) # https://github.com/roc-lang/roc/issues/7289
+        Err err -> Err (Inspect.toStr err)
