@@ -1,12 +1,14 @@
 const std = @import("std");
+const clap = @import("clap");
+
 const str = @import("roc/str.zig");
 const list = @import("roc/list.zig");
-const clap = @import("clap");
+const RocResultStr = @import("RocResult.zig").RocResult(str.RocStr, str.RocStr);
 
 const RocAllocator = @import("RocAllocator.zig");
 
-extern fn roc__part1ForHost_1_exposed_generic(*list.RocList, *const str.RocStr) void;
-extern fn roc__part2ForHost_1_exposed_generic(*list.RocList, *const str.RocStr) void;
+extern fn roc__part1ForHost_1_exposed_generic(*RocResultStr, *const str.RocStr) void;
+extern fn roc__part2ForHost_1_exposed_generic(*RocResultStr, *const str.RocStr) void;
 
 const input_buffer_size = 1 << 20;
 
@@ -21,33 +23,13 @@ const Options = struct {
 };
 
 pub fn main() void {
-    const stdout = std.io.getStdOut().writer();
-    const stderr = std.io.getStdErr().writer();
-
     var input_buffer: [input_buffer_size]u8 = undefined;
     const options_or_exit = parseOptions(&input_buffer) catch |err| std.debug.panic("parsing options: {any}", .{err});
 
     const options = switch (options_or_exit) {
         OptionsOrExit.fileNotFound => |file_name| {
-            stderr.print(
-                \\ I can not find the input file. I was looking for it at `{s}`.
-                \\
-                \\ You can specify an input file by providing the filename as an argument. For example:
-                \\
-                \\ $ roc my_day.roc -- input_file.txt
-                \\
-                \\ or
-                \\
-                \\ $ roc build my_day.roc 
-                \\ $ ./my_day input_file.txt
-                \\
-                \\ When you use `-` as filename, then I read the content from stdin.
-                \\
-                \\ When no filename is speficied, I am looking for an input file next to the Roc file, but with the file-extension `.input`.
-                \\
-            ,
-                .{file_name},
-            ) catch unreachable;
+            const stderr = std.io.getStdErr().writer();
+            stderr.print(fileNotFoundMessage, .{file_name}) catch unreachable;
             return;
         },
         OptionsOrExit.exit => return,
@@ -58,38 +40,65 @@ pub fn main() void {
     var fba = std.heap.FixedBufferAllocator.init(roc_memory_buffer);
     roc_allocator = RocAllocator{ .allocator = fba.allocator() };
 
-    var result = list.RocList.empty();
-    var timer = std.time.Timer.start() catch unreachable;
-
     if (options.part1) {
-        const aoc_input = str.RocStr.fromSlice(options.puzzle_input);
-        roc__part1ForHost_1_exposed_generic(&result, &aoc_input);
-        const took1 = std.fmt.fmtDuration(timer.read());
-        stdout.print(
-            "Part1 in {}, used {} of memory:\n{s}\n\n",
-            .{ took1, std.fmt.fmtIntSizeDec(fba.end_index), rocListAsSlice(result) },
-        ) catch unreachable;
+        runPart("part1", fba, options);
 
         fba.reset();
-        timer.reset();
     }
 
     if (options.part2) {
-        const aoc_input = str.RocStr.fromSlice(options.puzzle_input);
-        roc__part2ForHost_1_exposed_generic(&result, &aoc_input);
-        const took2 = std.fmt.fmtDuration(timer.read());
-        stdout.print(
-            "Part2 in {}, used {} of memory:\n{s}\n",
-            .{ took2, std.fmt.fmtIntSizeDec(fba.end_index), rocListAsSlice(result) },
-        ) catch unreachable;
+        runPart("part2", fba, options);
     }
 }
 
-fn rocListAsSlice(rocList: list.RocList) []const u8 {
-    if (rocList.bytes) |bytes| {
-        return bytes[0..rocList.len()];
+const fileNotFoundMessage =
+    \\ I can not find the input file. I was looking for it at `{s}`.
+    \\
+    \\ You can specify an input file by providing the filename as an argument. For example:
+    \\
+    \\ $ roc my_day.roc -- input_file.txt
+    \\
+    \\ or
+    \\
+    \\ $ roc build my_day.roc
+    \\ $ ./my_day input_file.txt
+    \\
+    \\ When you use `-` as filename, then I read the content from stdin.
+    \\
+    \\ When no filename is speficied, I am looking for an input file next to the Roc file, but with the file-extension `.input`.
+    \\
+;
+
+fn runPart(name: []const u8, fba: std.heap.FixedBufferAllocator, options: Options) void {
+    const stdout = std.io.getStdOut().writer();
+    const stderr = std.io.getStdErr().writer();
+
+    const aoc_input = str.RocStr.fromSlice(options.puzzle_input);
+    var result: RocResultStr = undefined;
+
+    var timer = std.time.Timer.start() catch unreachable;
+    roc__part1ForHost_1_exposed_generic(&result, &aoc_input);
+
+    const took = std.fmt.fmtDuration(timer.read());
+    if (result.isOk()) {
+        stdout.print(
+            "{s} in {}, used {} of memory:\n{s}\n\n",
+            .{
+                name,
+                took,
+                std.fmt.fmtIntSizeDec(fba.end_index),
+                result.payload.ok.asSlice(),
+            },
+        ) catch unreachable;
+    } else {
+        stderr.print(
+            "{s} failed with: {s}\n\n",
+            .{
+                name,
+                result.payload.err.asSlice(),
+            },
+        ) catch unreachable;
     }
-    return "";
 }
 
 const OptionsOrExit = union(enum) {
