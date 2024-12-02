@@ -10,7 +10,7 @@ examplePart1 =
 
 expect
     got = part1 examplePart1
-    expected = Ok "the example for part 1"
+    expected = Ok "the example for part 1 fail"
     got == expected
 
 part1 = \input ->
