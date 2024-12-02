@@ -25,3 +25,6 @@ jobs:
 
       - name: Run example
         run: roc examples/day.roc
+
+      - name: Test example
+        run: roc test examples/day.roc
