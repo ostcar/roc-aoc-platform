@@ -13,6 +13,8 @@ extern fn roc__part2ForHost_1_exposed_generic(*RocResultStr, *const str.RocStr) 
 const input_buffer_size = 1 << 20;
 
 var roc_allocator: RocAllocator = undefined;
+var startup_memory: usize = undefined;
+var global_fba: std.heap.FixedBufferAllocator = undefined;
 
 const Options = struct {
     part1: bool,
@@ -36,18 +38,19 @@ pub fn main() void {
         OptionsOrExit.options => |options| options,
     };
 
+    startup_memory = options.memory;
     const roc_memory_buffer = std.heap.page_allocator.alloc(u8, options.memory) catch @panic("OOM");
-    var fba = std.heap.FixedBufferAllocator.init(roc_memory_buffer);
-    roc_allocator = RocAllocator{ .allocator = fba.allocator(), .skip_deallocate = options.skip_deallocate };
+    global_fba = std.heap.FixedBufferAllocator.init(roc_memory_buffer);
+    roc_allocator = RocAllocator{ .allocator = global_fba.allocator(), .skip_deallocate = options.skip_deallocate };
 
     if (options.part1) {
-        runPart("part1", roc__part1ForHost_1_exposed_generic, fba, options);
+        runPart("part1", roc__part1ForHost_1_exposed_generic, global_fba, options);
 
-        fba.reset();
+        global_fba.reset();
     }
 
     if (options.part2) {
-        runPart("part2", roc__part2ForHost_1_exposed_generic, fba, options);
+        runPart("part2", roc__part2ForHost_1_exposed_generic, global_fba, options);
     }
 }
 
@@ -198,11 +201,26 @@ fn readInput(may_file_name: ?[]const u8, buffer: []u8) !ContentOrFileNotFound {
 
 // Roc memory stuff
 export fn roc_alloc(size: usize, alignment: u32) [*]u8 {
-    return roc_allocator.alloc(size, alignment) catch std.debug.panic("panic: OOM in roc_alloc", .{});
+    return roc_allocator.alloc(size, alignment) catch printOOMError(size);
 }
 
 export fn roc_realloc(ptr: [*]u8, new_size: usize, old_size: usize, alignment: u32) [*]u8 {
-    return roc_allocator.realloc(ptr, new_size, old_size, alignment) catch std.debug.panic("panic: OOM in roc_realloc", .{});
+    return roc_allocator.realloc(ptr, new_size, old_size, alignment) catch printOOMError(new_size);
+}
+
+fn printOOMError(size: usize) noreturn {
+    const stderr = std.io.getStdErr().writer();
+    stderr.print(
+        \\ Not enough memory. This program uses preallocated memory. Please use --memory to start it with more memory.
+        \\ The program was started with {}. When failing, {} are used.
+        \\
+    ,
+        .{
+            startup_memory,
+            global_fba.end_index + size,
+        },
+    ) catch unreachable;
+    std.process.exit(1);
 }
 
 export fn roc_dealloc(ptr: [*]u8, alignment: u32) void {
