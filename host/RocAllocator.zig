@@ -2,27 +2,26 @@ const std = @import("std");
 
 allocator: std.mem.Allocator,
 skip_deallocate: bool = false,
-counter: usize = 0,
 
 const this = @This();
 
-pub fn alloc(self: *this, size: usize, alignment: u32) ![*]u8 {
+pub fn alloc(self: this, size: usize, alignment: u32) ![*]u8 {
     if (self.skip_deallocate)
         return self.alloc_without_len(size, alignment);
 
     return self.alloc_with_len(size, alignment);
 }
 
-fn alloc_with_len(self: *this, size: usize, alignment: u32) ![*]u8 {
-    const zig_alignment: usize = if (alignment <= 8) 8 else 16;
+fn alloc_with_len(self: this, size: usize, alignment: u32) ![*]u8 {
+    const zig_alignment: u32 = if (alignment <= 8) 8 else 16;
     const size_with_len = size + zig_alignment;
-    const ptr = try self.alloc_without_len(size_with_len, alignment);
+    const ptr = try self.alloc_without_len(size_with_len, zig_alignment);
     const as_usize: [*]usize = @ptrCast(@alignCast(ptr));
     as_usize[0] = size;
     return ptr + zig_alignment;
 }
 
-fn alloc_without_len(self: *this, size: usize, alignment: u32) ![*]u8 {
+fn alloc_without_len(self: this, size: usize, alignment: u32) ![*]u8 {
     // Only alignment of 8 or 16 are realistic. See
     // https://roc.zulipchat.com/#narrow/channel/302903-platform-development/topic/roc_alloc.20and.20alignment/near/482227735
     const v = if (alignment <= 8)
@@ -30,17 +29,12 @@ fn alloc_without_len(self: *this, size: usize, alignment: u32) ![*]u8 {
     else
         try self.allocator.alignedAlloc(u8, 16, size);
 
-    self.counter += size;
     return v.ptr;
 }
 
-pub fn realloc(self: *this, ptr: [*]u8, new_size: usize, old_size: usize, alignment: u32) ![*]u8 {
+pub fn realloc(self: this, ptr: [*]u8, new_size: usize, old_size: usize, alignment: u32) ![*]u8 {
     const zig_alignment: u32 = if (alignment <= 8) 8 else 16;
     const real_new_size = if (self.skip_deallocate) new_size else new_size + zig_alignment;
-
-    // const slice_start = if (self.skip_deallocate) ptr else ptr - zig_alignment;
-    // const slice_end = if (self.skip_deallocate) old_size else old_size + zig_alignment;
-
     const slice = if (self.skip_deallocate) ptr[0..old_size] else (ptr - zig_alignment)[0 .. old_size + zig_alignment];
 
     const slice_aligned = if (alignment <= 8)
@@ -49,11 +43,10 @@ pub fn realloc(self: *this, ptr: [*]u8, new_size: usize, old_size: usize, alignm
         @as([]align(16) u8, @ptrCast(@alignCast(slice)));
 
     const new_slice = try self.allocator.realloc(slice_aligned, real_new_size);
-    self.counter += real_new_size - slice.len;
-    return new_slice.ptr;
+    return new_slice.ptr + zig_alignment;
 }
 
-pub fn dealloc(self: *this, ptr: [*]u8, alignment: u32) void {
+pub fn dealloc(self: this, ptr: [*]u8, alignment: u32) void {
     if (self.skip_deallocate) return;
 
     const zig_alignment: u32 = if (alignment <= 8) 8 else 16;
@@ -67,5 +60,4 @@ pub fn dealloc(self: *this, ptr: [*]u8, alignment: u32) void {
         @as([*]align(16) u8, @ptrCast(@alignCast(size_pointer)))[0..real_size];
 
     self.allocator.free(slice);
-    self.counter -= real_size;
 }
