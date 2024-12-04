@@ -40,9 +40,6 @@ pub fn main() void {
     var fba = std.heap.FixedBufferAllocator.init(roc_memory_buffer);
     roc_allocator = RocAllocator{ .allocator = fba.allocator(), .skip_deallocate = options.skip_deallocate };
 
-    // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    // roc_allocator = RocAllocator{ .allocator = gpa.allocator() };
-
     if (options.part1) {
         runPart("part1", roc__part1ForHost_1_exposed_generic, fba, options);
 
@@ -201,11 +198,11 @@ fn readInput(may_file_name: ?[]const u8, buffer: []u8) !ContentOrFileNotFound {
 
 // Roc memory stuff
 export fn roc_alloc(size: usize, alignment: u32) [*]u8 {
-    return roc_allocator.alloc(size, alignment) catch |err| std.debug.panic("panic: OOM after: {}", .{err});
+    return roc_allocator.alloc(size, alignment) catch std.debug.panic("panic: OOM in roc_alloc", .{});
 }
 
 export fn roc_realloc(ptr: [*]u8, new_size: usize, old_size: usize, alignment: u32) [*]u8 {
-    return roc_allocator.realloc(ptr, new_size, old_size, alignment) catch std.debug.panic("panic: OOM2", .{});
+    return roc_allocator.realloc(ptr, new_size, old_size, alignment) catch std.debug.panic("panic: OOM in roc_realloc", .{});
 }
 
 export fn roc_dealloc(ptr: [*]u8, alignment: u32) void {
