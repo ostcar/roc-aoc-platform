@@ -17,7 +17,7 @@ An roc file can be look like this:
 
 ```roc
 app [solution] {
-    pf: platform "TODO",
+    pf: platform "https://github.com/ostcar/roc-aoc-platform/releases/download/v0.0.7/Tg23npX1TEGNlsYqX1JfrdtvW4OlwLdvsFnJMUJNZSU.tar.br",
 }
 
 examplePart1 =
