@@ -40,6 +40,9 @@ pub fn main() void {
     var fba = std.heap.FixedBufferAllocator.init(roc_memory_buffer);
     roc_allocator = RocAllocator{ .allocator = fba.allocator() };
 
+    // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    // roc_allocator = RocAllocator{ .allocator = gpa.allocator() };
+
     if (options.part1) {
         runPart("part1", roc__part1ForHost_1_exposed_generic, fba, options);
 
@@ -197,12 +200,31 @@ fn readInput(may_file_name: ?[]const u8, buffer: []u8) !ContentOrFileNotFound {
 }
 
 // Roc memory stuff
+
+// const Align = 2 * @alignOf(usize);
+// extern fn malloc(size: usize) callconv(.C) ?*align(Align) anyopaque;
+// extern fn realloc(c_ptr: [*]align(Align) u8, size: usize) callconv(.C) ?*anyopaque;
+// extern fn free(c_ptr: [*]align(Align) u8) callconv(.C) void;
+
+// export fn roc_alloc(size: usize, _: u32) callconv(.C) ?*anyopaque {
+//     return malloc(size);
+// }
+
+// export fn roc_realloc(c_ptr: *anyopaque, new_size: usize, _: usize, _: u32) callconv(.C) ?*anyopaque {
+//     return realloc(@as([*]align(Align) u8, @alignCast(@ptrCast(c_ptr))), new_size);
+// }
+
+// export fn roc_dealloc(c_ptr: *anyopaque, _: u32) callconv(.C) void {
+//     free(@as([*]align(Align) u8, @alignCast(@ptrCast(c_ptr))));
+// }
+
 export fn roc_alloc(size: usize, alignment: u32) [*]u8 {
-    return roc_allocator.alloc(size, alignment) catch std.debug.panic("panic: OOM", .{});
+    const v = roc_allocator.alloc(size, alignment) catch |err| std.debug.panic("panic: OOM after {} bytes: {}", .{ roc_allocator.counter, err });
+    return v;
 }
 
 export fn roc_realloc(ptr: [*]u8, new_size: usize, old_size: usize, alignment: u32) [*]u8 {
-    return roc_allocator.realloc(ptr, new_size, old_size, alignment) catch std.debug.panic("panic: OOM", .{});
+    return roc_allocator.realloc(ptr, new_size, old_size, alignment) catch std.debug.panic("panic: OOM2", .{});
 }
 
 export fn roc_dealloc(ptr: [*]u8, alignment: u32) void {
