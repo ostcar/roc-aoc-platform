@@ -43,6 +43,9 @@ pub fn realloc(self: this, ptr: [*]u8, new_size: usize, old_size: usize, alignme
         @as([]align(16) u8, @ptrCast(@alignCast(slice)));
 
     const new_slice = try self.allocator.realloc(slice_aligned, real_new_size);
+    const as_usize: [*]usize = @ptrCast(@alignCast(new_slice.ptr));
+    as_usize[0] = new_size;
+
     return new_slice.ptr + zig_alignment;
 }
 

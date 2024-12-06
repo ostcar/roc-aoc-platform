@@ -14,7 +14,6 @@ const input_buffer_size = 1 << 20;
 
 var roc_allocator: RocAllocator = undefined;
 var startup_memory: usize = undefined;
-var global_fba: std.heap.FixedBufferAllocator = undefined;
 
 const Options = struct {
     part1: bool,
@@ -39,18 +38,15 @@ pub fn main() void {
     };
 
     startup_memory = options.memory;
-    const roc_memory_buffer = std.heap.page_allocator.alloc(u8, options.memory) catch @panic("OOM");
-    global_fba = std.heap.FixedBufferAllocator.init(roc_memory_buffer);
-    roc_allocator = RocAllocator{ .allocator = global_fba.allocator(), .skip_deallocate = options.skip_deallocate };
+
+    roc_allocator = RocAllocator{ .allocator = std.heap.c_allocator, .skip_deallocate = options.skip_deallocate };
 
     if (options.part1) {
-        runPart("part1", roc__part1ForHost_1_exposed_generic, global_fba, options);
-
-        global_fba.reset();
+        runPart("part1", roc__part1ForHost_1_exposed_generic, options);
     }
 
     if (options.part2) {
-        runPart("part2", roc__part2ForHost_1_exposed_generic, global_fba, options);
+        runPart("part2", roc__part2ForHost_1_exposed_generic, options);
     }
 }
 
@@ -72,7 +68,7 @@ const fileNotFoundMessage =
     \\
 ;
 
-fn runPart(name: []const u8, func: fn (*RocResultStr, *const str.RocStr) callconv(.C) void, fba: std.heap.FixedBufferAllocator, options: Options) void {
+fn runPart(name: []const u8, func: fn (*RocResultStr, *const str.RocStr) callconv(.C) void, options: Options) void {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
 
@@ -85,11 +81,10 @@ fn runPart(name: []const u8, func: fn (*RocResultStr, *const str.RocStr) callcon
     const took = std.fmt.fmtDuration(timer.read());
     if (result.isOk()) {
         stdout.print(
-            "{s} in {}, used {} of memory:\n{s}\n\n",
+            "{s} in {}:\n{s}\n\n",
             .{
                 name,
                 took,
-                std.fmt.fmtIntSizeDec(fba.end_index),
                 result.payload.ok.asSlice(),
             },
         ) catch unreachable;
@@ -201,24 +196,20 @@ fn readInput(may_file_name: ?[]const u8, buffer: []u8) !ContentOrFileNotFound {
 
 // Roc memory stuff
 export fn roc_alloc(size: usize, alignment: u32) [*]u8 {
-    return roc_allocator.alloc(size, alignment) catch printOOMError(size);
+    return roc_allocator.alloc(size, alignment) catch printOOMError();
 }
 
 export fn roc_realloc(ptr: [*]u8, new_size: usize, old_size: usize, alignment: u32) [*]u8 {
-    return roc_allocator.realloc(ptr, new_size, old_size, alignment) catch printOOMError(new_size);
+    return roc_allocator.realloc(ptr, new_size, old_size, alignment) catch printOOMError();
 }
 
-fn printOOMError(size: usize) noreturn {
+fn printOOMError() noreturn {
     const stderr = std.io.getStdErr().writer();
     stderr.print(
-        \\ Not enough memory. This program uses preallocated memory. Please use --memory to start it with more memory.
-        \\ The program was started with {}. When failing, {} are used.
+        \\ Out of Memory.
         \\
     ,
-        .{
-            startup_memory,
-            global_fba.end_index + size,
-        },
+        .{},
     ) catch unreachable;
     std.process.exit(1);
 }
