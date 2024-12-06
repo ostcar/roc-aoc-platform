@@ -196,11 +196,11 @@ fn readInput(may_file_name: ?[]const u8, buffer: []u8) !ContentOrFileNotFound {
 
 // Roc memory stuff
 export fn roc_alloc(size: usize, alignment: u32) [*]u8 {
-    return roc_allocator.alloc(size, alignment) catch printOOMError(size);
+    return roc_allocator.alloc(size, alignment) catch printOOMError();
 }
 
 export fn roc_realloc(ptr: [*]u8, new_size: usize, old_size: usize, alignment: u32) [*]u8 {
-    return roc_allocator.realloc(ptr, new_size, old_size, alignment) catch printOOMError(new_size);
+    return roc_allocator.realloc(ptr, new_size, old_size, alignment) catch printOOMError();
 }
 
 fn printOOMError() noreturn {
